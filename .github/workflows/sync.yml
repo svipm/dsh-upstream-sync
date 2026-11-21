@@ -9,11 +9,31 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sync-dsh-unrestricted
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
+      - name: Checkout this repo (for upstream-lock.json)
+        uses: actions/checkout@v4
+
+      - name: Verify upstream identity (anti-squatting lock)
+        env:
+          UPSTREAM: yexi-by/dsh-unrestricted
+        run: |
+          set -euo pipefail
+          expected=$(jq -r .repo_id upstream-lock.json)
+          actual=$(curl -fsS "https://api.github.com/repos/${UPSTREAM}" | jq -r .id)
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::Upstream repo ID mismatch: lock expects ${expected}, API returned ${actual}. The repo at this name may have been deleted and re-registered. Sync aborted; mirror is preserved."
+            exit 1
+          fi
+          echo "Upstream identity verified (repo id ${actual})."
+
       - name: Checkout private mirror
         uses: actions/checkout@v4
         with:
@@ -29,7 +49,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/yexi-by/dsh-unrestricted.git 2>/dev/null || git remote set-url upstream https://github.com/yexi-by/dsh-unrestricted.git
-          git fetch --prune upstream master
+
+          if ! git fetch --prune --tags upstream master; then
+            echo "::error::Fetch from upstream failed. Upstream may be deleted, renamed, or network-restricted. The private mirror is untouched; investigate manually."
+            exit 1
+          fi
 
           if [ "$(git rev-parse HEAD)" = "$(git rev-parse upstream/master)" ]; then
             echo "Already up to date: $(git rev-parse --short HEAD)"
@@ -39,3 +63,5 @@ jobs:
           echo "Syncing $(git rev-parse --short HEAD) -> $(git rev-parse --short upstream/master)"
           git reset --hard upstream/master
           git push --force origin HEAD:master
+          git push --force origin 'refs/tags/*:refs/tags/*'
+          echo "Done. Mirror now at $(git rev-parse --short upstream/master)."
