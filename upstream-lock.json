@@ -1,0 +1,6 @@
+{
+  "repo": "yexi-by/dsh-unrestricted",
+  "repo_id": 1342560370,
+  "default_branch": "master",
+  "note": "GitHub repository IDs are immutable. The sync workflow compares the live API id against repo_id before syncing: if the upstream repo is deleted and someone re-registers the same name, the id will differ and the sync will abort, keeping the mirror intact instead of overwriting it with a squatter's content. To add another upstream, add its full_name and repo_id here."
+}
